@@ -4,13 +4,14 @@ import dotenv from "dotenv";
 import cookieParser from 'cookie-parser';
 import mongoDb from "./config/mongoDB";
 import routes from "./routes/routes.js";
+import corsOptions from "./config/cors";
 
 const app = express();
 
 dotenv.config();
 mongoDb();
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));

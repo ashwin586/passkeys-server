@@ -2,6 +2,7 @@ import { Router } from "express";
 import authControllers from "../controllers/authControllers";
 import { authValidator } from "../validators/authValidators";
 import validateRequest from "../middleware/validateRequest";
+import validateJwt, { checkRefreshToken } from "../middleware/validateJWT";
 
 const routes = Router();
 
@@ -11,6 +12,9 @@ routes.post("/register", authValidator, validateRequest, authControllers.registe
 routes.post("/googleSignIn", authControllers.googleSignIn);
 
 // check
-routes.post("/refresh-token", authControllers.refreshToken);
+routes.get("/refresh-token", checkRefreshToken, authControllers.refreshToken);
+
+// Profile
+routes.get("/profile", validateJwt, authControllers.fetchProfile);
 
 export default routes;

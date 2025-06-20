@@ -14,7 +14,6 @@ const validateJwt = async (req: Request, res: Response, next: NextFunction) => {
     req.user = decoded as payloadInterface;
     next();
   } catch (error: any) {
-    console.error(error);
     if (error.name === "TokenExpiredError") {
       res.status(401).json({ message: "Token Expired" });
       return;
@@ -26,6 +25,21 @@ const validateJwt = async (req: Request, res: Response, next: NextFunction) => {
     res.status(500).json({ message: "Internal server error" });
     return;
   }
+};
+
+export const checkRefreshToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const token = req.cookies.refreshToken;
+
+  if (!token) {
+    res.status(401).json({ message: "Refresh token missing" });
+    return
+  }
+
+  next();
 };
 
 export default validateJwt;

@@ -34,16 +34,16 @@ const authControllers = {
         role: "user",
       };
       const accesToken = jwt.sign(payload, process.env.JWT_SECRET!, {
-        expiresIn: "5s",
+        expiresIn: "1m",
       });
       const refreshToken = jwt.sign({ email }, process.env.JWT_REFRESH!, {
-        expiresIn: "10s",
+        expiresIn: "2m",
       });
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
-        maxAge: 10000,
+        maxAge: 2 * 60 * 1000,
       });
       res.status(200).json({ message: "Login Successful", token: accesToken });
       return;
@@ -51,6 +51,7 @@ const authControllers = {
       console.error(error);
     }
   },
+
   register: async (
     req: Request<{}, {}, authInterface>,
     res: Response
@@ -72,7 +73,7 @@ const authControllers = {
         password: hashedPassword,
       });
       await newUser.save();
-      res.status(201).json({ message: "User added." });
+      res.status(201).json({ message: "User added successfuly" });
       return;
     } catch (error) {
       console.error(error);
@@ -80,8 +81,45 @@ const authControllers = {
       return;
     }
   },
+
   googleSignIn: async (req: Request, res: Response) => {},
-  refreshToken: async (req: Request, res: Response) => {},
+
+  refreshToken: async (req: Request, res: Response) => {
+    try {
+      const refreshToken = req.cookies.refreshToken;
+      if (!refreshToken) {
+        res.status(401).json({ message: "Token Expired" });
+        return;
+      }
+      const payload = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH!
+      ) as jwt.JwtPayload;
+      const email = payload?.email;
+
+      const newAccessToken = jwt.sign({ email }, process.env.JWT_SECRET!, {
+        expiresIn: "1m",
+      });
+
+      res.status(200).json({ token: newAccessToken });
+      return;
+    } catch (error) {
+      console.error(error);
+      res.status(403).json({ message: "Invalid or expired refresh token" });
+      return;
+    }
+  },
+
+  fetchProfile: async (req: Request, res: Response) => {
+    try {
+      const userInfo = req.user;
+      const user = await User.findOne({ email: userInfo?.email });
+      res.status(200).json({ user: user });
+      return;
+    } catch (error: unknown) {
+      console.error("profile error", error);
+    }
+  },
 };
 
 export default authControllers;
