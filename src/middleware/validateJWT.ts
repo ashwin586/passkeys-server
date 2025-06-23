@@ -35,8 +35,8 @@ export const checkRefreshToken = (
   const token = req.cookies.refreshToken;
 
   if (!token) {
-    res.status(401).json({ message: "Refresh token missing" });
-    return
+    res.status(401).json({ message: "Session token missing" });
+    return;
   }
 
   next();
