@@ -34,16 +34,16 @@ const authControllers = {
         role: "user",
       };
       const accesToken = jwt.sign(payload, process.env.JWT_SECRET!, {
-        expiresIn: "1m",
+        expiresIn: "30m",
       });
       const refreshToken = jwt.sign({ email }, process.env.JWT_REFRESH!, {
-        expiresIn: "2m",
+        expiresIn: "1hr",
       });
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
-        maxAge: 2 * 60 * 1000,
+        maxAge: 60 * 60 * 1000,
       });
       res.status(200).json({ message: "Login Successful", token: accesToken });
       return;
@@ -108,18 +108,7 @@ const authControllers = {
       res.status(403).json({ message: "Invalid or expired refresh token" });
       return;
     }
-  },
-
-  fetchProfile: async (req: Request, res: Response) => {
-    try {
-      const userInfo = req.user;
-      const user = await User.findOne({ email: userInfo?.email });
-      res.status(200).json({ user: user });
-      return;
-    } catch (error: unknown) {
-      console.error("profile error", error);
-    }
-  },
+  }
 };
 
 export default authControllers;
