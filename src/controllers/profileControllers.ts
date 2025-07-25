@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import User from "../models/users";
 import SavedPassword from "../models/savedPasswords";
-import { encrypt } from "../utils/crypto";
+import { decrypt, encrypt } from "../utils/crypto";
+import { userPasswordsInterface } from "../types/interface";
 
 const profileControllers = {
   fetchProfile: async (req: Request, res: Response) => {
@@ -56,10 +57,18 @@ const profileControllers = {
   // * * Manage Password controllers
   fetchPasswords: async (req: Request, res: Response) => {
     try {
-      const userEmail = req.user;
-      const userId = await User.findOne({ email: userEmail });
+      const user = req.user;
+      const userId = await User.findOne({ email: user?.email });
       const userPasswords = await SavedPassword.find({ user: userId });
-      res.status(200).json({ passwords: userPasswords });
+      const userCredentials = userPasswords.map(
+        (credentials: userPasswordsInterface) => ({
+          name: credentials.name,
+          url: credentials.url,
+          userName: credentials.userName,
+          password: decrypt(credentials.password, credentials.iv),
+        })
+      );
+      res.status(200).json({ passwords: userCredentials });
       return;
     } catch (error) {
       console.error(error);

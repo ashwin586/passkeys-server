@@ -1,3 +1,5 @@
+import { Types } from "mongoose";
+
 export interface userInterface {
   name: string;
   email: string;
@@ -15,4 +17,12 @@ export interface payloadInterface {
   role: string;
   iat: number;
   exp: number;
+}
+
+export interface userPasswordsInterface {
+  name: string;
+  url: string;
+  userName: string;
+  password: string;
+  iv: string;
 }
