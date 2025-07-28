@@ -20,6 +20,7 @@ export interface payloadInterface {
 }
 
 export interface userPasswordsInterface {
+  id: string;
   name: string;
   url: string;
   userName: string;

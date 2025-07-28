@@ -21,7 +21,7 @@ routes.patch('/profile', validateJwt, profileValidators, profileControllers.upda
 
 routes.get('/profile/managePasswords', validateJwt, profileControllers.fetchPasswords);
 routes.post('/profile/managePasswords',validateJwt, profileControllers.addPasswords);
-routes.patch('/profile/managePasswords', validateJwt, profileControllers.updatePasswords);
-routes.delete('/profile/managePasswords', validateJwt, profileControllers.deletePasswords);
+routes.patch('/profile/managePasswords/:id', validateJwt, profileControllers.updatePasswords);
+routes.delete('/profile/managePasswords/:id', validateJwt, profileControllers.deletePasswords);
 
 export default routes;

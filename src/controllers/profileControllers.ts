@@ -6,6 +6,7 @@ import { decrypt, encrypt } from "../utils/crypto";
 import { userPasswordsInterface } from "../types/interface";
 
 const profileControllers = {
+  // ** Manage User Details Controllers
   fetchProfile: async (req: Request, res: Response) => {
     try {
       const userInfo = req.user;
@@ -60,14 +61,13 @@ const profileControllers = {
       const user = req.user;
       const userId = await User.findOne({ email: user?.email });
       const userPasswords = await SavedPassword.find({ user: userId });
-      const userCredentials = userPasswords.map(
-        (credentials: userPasswordsInterface) => ({
-          name: credentials.name,
-          url: credentials.url,
-          userName: credentials.userName,
-          password: decrypt(credentials.password, credentials.iv),
-        })
-      );
+      const userCredentials = userPasswords.map((credentials) => ({
+        id: credentials?._id,
+        name: credentials?.name,
+        url: credentials.url,
+        userName: credentials.userName,
+        password: decrypt(credentials.password, credentials.iv),
+      }));
       res.status(200).json({ passwords: userCredentials });
       return;
     } catch (error) {
@@ -78,14 +78,14 @@ const profileControllers = {
 
   addPasswords: async (req: Request, res: Response) => {
     try {
-      const { appName, password, url, userName } = req.body;
+      const { name, password, url, userName } = req.body;
       const user = req.user;
       const userId = await User.findOne({ email: user?.email });
       const { iv, encryptedData } = encrypt(password);
 
       const appDetails = new SavedPassword({
         user: userId,
-        name: appName,
+        name,
         url,
         userName,
         iv,
@@ -99,8 +99,53 @@ const profileControllers = {
       console.error(error);
     }
   },
-  updatePasswords: async (req: Request, res: Response) => {},
-  deletePasswords: async (req: Request, res: Response) => {},
+
+  updatePasswords: async (req: Request, res: Response) => {
+    try {
+      const user = req.user;
+      const { name, password, url, userName } = req.body;
+      const { id } = req.params;
+      const userId = await User.findOne({ email: user?.email });
+      const { iv, encryptedData } = encrypt(password);
+      const updatedDetails = {
+        user: userId,
+        name,
+        url,
+        userName,
+        iv,
+        password: encryptedData,
+      };
+      const response = await SavedPassword.findByIdAndUpdate(
+        id,
+        updatedDetails,
+        { new: true }
+      );
+      res.status(200).json({
+        message: "Updated Credentials",
+        updatedData: {
+          id: response?._id,
+          name: response?.name,
+          userName: response?.userName,
+          password: response?.password,
+          url: response?.url,
+        },
+      });
+      return;
+    } catch (error) {
+      console.error(error);
+    }
+  },
+  
+  deletePasswords: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await SavedPassword.findByIdAndDelete(id);
+      res.status(200).json({ message: "Deleted Credentials" });
+      return;
+    } catch (error) {
+      console.log(error);
+    }
+  },
 };
 
 export default profileControllers;
