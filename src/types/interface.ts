@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { Request } from "express";
 
 export interface userInterface {
   name: string;
@@ -26,4 +27,8 @@ export interface userPasswordsInterface {
   userName: string;
   password: string;
   iv: string;
+}
+
+export interface AuthRequest extends Request {
+  user?: any;
 }

@@ -3,11 +3,11 @@ import bcrypt from "bcrypt";
 import User from "../models/users";
 import SavedPassword from "../models/savedPasswords";
 import { decrypt, encrypt } from "../utils/crypto";
-import { userPasswordsInterface } from "../types/interface";
+import { userPasswordsInterface, AuthRequest } from "../types/interface";
 
 const profileControllers = {
   // ** Manage User Details Controllers
-  fetchProfile: async (req: Request, res: Response) => {
+  fetchProfile: async (req: AuthRequest, res: Response) => {
     try {
       const userInfo = req.user;
       const user = await User.findOne({ email: userInfo?.email });
@@ -23,7 +23,7 @@ const profileControllers = {
     }
   },
 
-  updateProfile: async (req: Request, res: Response) => {
+  updateProfile: async (req: AuthRequest, res: Response) => {
     try {
       const userInfo = req.user;
       const user = await User.findOne({ email: userInfo?.email });
@@ -56,7 +56,7 @@ const profileControllers = {
   },
 
   // * * Manage Password controllers
-  fetchPasswords: async (req: Request, res: Response) => {
+  fetchPasswords: async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user;
       const userId = await User.findOne({ email: user?.email });
@@ -76,7 +76,7 @@ const profileControllers = {
     }
   },
 
-  addPasswords: async (req: Request, res: Response) => {
+  addPasswords: async (req: AuthRequest, res: Response) => {
     try {
       const { name, password, url, userName } = req.body;
       const user = req.user;
@@ -100,7 +100,7 @@ const profileControllers = {
     }
   },
 
-  updatePasswords: async (req: Request, res: Response) => {
+  updatePasswords: async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user;
       const { name, password, url, userName } = req.body;
@@ -136,7 +136,7 @@ const profileControllers = {
     }
   },
   
-  deletePasswords: async (req: Request, res: Response) => {
+  deletePasswords: async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       await SavedPassword.findByIdAndDelete(id);

@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
 import { Response, Request, NextFunction } from "express";
-import { payloadInterface } from "../types/interface";
+import { payloadInterface, AuthRequest } from "../types/interface";
 
-const validateJwt = async (req: Request, res: Response, next: NextFunction) => {
+const validateJwt = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {

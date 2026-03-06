@@ -1,14 +1,15 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import cookieParser from 'cookie-parser';
+import cookieParser from "cookie-parser";
 import mongoDb from "./config/mongoDB";
-import routes from "./routes/routes.js";
+import routes from "./routes/routes";
 import corsOptions from "./config/cors";
 
 const app = express();
 
-dotenv.config();
+dotenv.config({ path: "../.env" });
+
 mongoDb();
 
 app.use(cors(corsOptions));

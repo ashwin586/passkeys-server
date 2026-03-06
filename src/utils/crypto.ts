@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import dotenv from "dotenv";
-dotenv.config();
+dotenv.config({ path: "../.env" });
 
 const algorithm = process.env.ENCRYPTION_ALGORITHM!;
 const key = Buffer.from(process.env.ENCRYPTION_KEY!, "hex");

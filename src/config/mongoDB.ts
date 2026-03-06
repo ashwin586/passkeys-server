@@ -9,6 +9,6 @@ export default async function mongoDb() {
     await mongoose.connect(uri);
     console.log("Connected to DB");
   } catch (error: any) {
-    console.error(error);
+    console.error("MongoDB error:", error);
   }
 }
