@@ -4,9 +4,9 @@ dotenv.config({ path: "../.env" });
 
 const algorithm = process.env.ENCRYPTION_ALGORITHM!;
 const key = Buffer.from(process.env.ENCRYPTION_KEY!, "hex");
-const iv = crypto.randomBytes(16);
 
 export function encrypt(password: string) {
+  const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encrypted = cipher.update(password, "utf-8", "hex");
   encrypted += cipher.final("hex");

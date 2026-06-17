@@ -2,7 +2,13 @@ import { Request, Response } from "express";
 import User from "../models/users";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { userInterface, authInterface } from "../types/interface";
+
+const asPlainObject = (value: any) => {
+  if (!value) return {};
+  return value.toObject ? value.toObject() : value;
+};
 
 const authControllers = {
   login: async (
@@ -11,7 +17,7 @@ const authControllers = {
   ): Promise<void> => {
     const { email, password } = req.body;
     try {
-      const existingUser: userInterface | null = await User.findOne({
+      const existingUser: (userInterface & any) | null = await User.findOne({
         email: email,
       });
 
@@ -29,9 +35,42 @@ const authControllers = {
         return;
       }
 
+      const now = new Date();
+      const sessionId = crypto.randomUUID();
+      const previousLoginAt = existingUser?.securityMetadata?.lastLoginAt || null;
+      existingUser.securityMetadata = {
+        ...asPlainObject(existingUser.securityMetadata),
+        previousLoginAt,
+        lastLoginAt: now,
+        loginCount: (existingUser?.securityMetadata?.loginCount || 0) + 1,
+      };
+      existingUser.sessions = [
+        {
+          sessionId,
+          userAgent: req.get("user-agent") || "Unknown device",
+          ipAddress:
+            req.ip || (req.headers["x-forwarded-for"] as string) || "Unknown IP",
+          createdAt: now,
+          lastSeenAt: now,
+          active: true,
+        },
+        ...(existingUser.sessions || []),
+      ].slice(0, 20);
+      existingUser.activity = [
+        {
+          type: "login",
+          message: "Successful login",
+          createdAt: now,
+        },
+        ...(existingUser.activity || []),
+      ].slice(0, 20);
+
+      await existingUser.save();
+
       const payload = {
         email: existingUser?.email,
         role: "user",
+        sessionId,
       };
       const accesToken = jwt.sign(payload, process.env.JWT_SECRET!, {
         expiresIn: "30m",
@@ -65,6 +104,12 @@ const authControllers = {
         name,
         email,
         password: hashedPassword,
+        securityMetadata: {
+          lastLoginAt: null,
+          previousLoginAt: null,
+          lastPasswordUpdatedAt: null,
+          loginCount: 0,
+        },
       });
       await newUser.save();
       res.status(201).json({ message: "User added successfuly" });
