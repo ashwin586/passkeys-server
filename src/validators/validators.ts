@@ -1,11 +1,25 @@
-import { body, check, param } from "express-validator";
+import { body, check, param, query } from "express-validator";
 
 export const authValidator = [
   check("email").isEmail().withMessage("Incorrect email and password"),
   check("password")
     .notEmpty()
-    .isLength({ min: 8 })
+    .isLength({ min: 64, max: 64 })
+    .matches(/^[a-f0-9]+$/i)
     .withMessage("Incorrect email and password"),
+];
+
+export const registerValidator = [
+  ...authValidator,
+  check("vaultSalt")
+    .notEmpty()
+    .isLength({ min: 32, max: 32 })
+    .matches(/^[a-f0-9]+$/i)
+    .withMessage("Invalid vault salt"),
+];
+
+export const saltQueryValidator = [
+  query("email").isEmail().withMessage("Valid email is required"),
 ];
 
 export const profileValidators = [
@@ -19,6 +33,10 @@ export const profileValidators = [
       value,
       "newPassword"
     );
+    const hasVaultSalt = Object.prototype.hasOwnProperty.call(
+      value,
+      "vaultSalt"
+    );
 
     if (!hasName && !hasCurrentPassword && !hasNewPassword) {
       throw new Error("No changes provided");
@@ -28,6 +46,10 @@ export const profileValidators = [
       throw new Error(
         "Both currentPassword and newPassword are required for password change"
       );
+    }
+
+    if (hasCurrentPassword && hasNewPassword && !hasVaultSalt) {
+      throw new Error("vaultSalt is required when changing password");
     }
 
     return true;
@@ -46,13 +68,20 @@ export const profileValidators = [
   check("currentPassword")
     .optional()
     .trim()
-    .isLength({ min: 8 })
-    .withMessage("Current password should be at least 8 characters"),
+    .isLength({ min: 64, max: 64 })
+    .matches(/^[a-f0-9]+$/i)
+    .withMessage("Invalid current password verifier"),
   check("newPassword")
     .optional()
     .trim()
-    .isLength({ min: 8 })
-    .withMessage("New password should be at least 8 characters"),
+    .isLength({ min: 64, max: 64 })
+    .matches(/^[a-f0-9]+$/i)
+    .withMessage("Invalid new password verifier"),
+  check("vaultSalt")
+    .optional()
+    .isLength({ min: 32, max: 32 })
+    .matches(/^[a-f0-9]+$/i)
+    .withMessage("Invalid vault salt"),
 ];
 
 export const settingsValidators = [
@@ -120,8 +149,14 @@ export const passwordValidators = [
     .withMessage("Username or Email is required"),
   check("password")
     .trim()
-    .isLength({ min: 8 })
-    .withMessage("Password must be at least 8 characters"),
+    .matches(/^[a-f0-9]+$/i)
+    .isLength({ min: 32, max: 8192 })
+    .withMessage("Invalid encrypted password payload"),
+  check("iv")
+    .trim()
+    .matches(/^[a-f0-9]+$/i)
+    .isLength({ min: 24, max: 24 })
+    .withMessage("Invalid encryption IV"),
 ];
 
 export const passwordIdValidator = [

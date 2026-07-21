@@ -5,10 +5,10 @@ REST API backend for the Vault password manager. Handles authentication, encrypt
 ## Features
 
 - 🔐 **JWT Authentication** — Secure login and registration with token expiry
-- 🔒 **Password Encryption** — AES encryption for all stored credentials
+- 🔒 **Zero-knowledge vault** — Client-side AES-GCM encryption; server stores ciphertext only
 - 📥 **CSV Import** — Bulk import credentials with duplicate detection
 - ✅ **Input Validation** — Request validation using express-validator
-- 🧂 **Password Hashing** — bcrypt for user password hashing
+- 🧂 **Password Hashing** — bcrypt for auth verifier hashing
 
 ## Tech Stack
 
@@ -51,7 +51,6 @@ Create a `.env` file in the root:
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/vault
 JWT_SECRET=your_jwt_secret_here
-ENCRYPTION_KEY=your_32_byte_encryption_key_here
 ```
 
 ### Running the Server
@@ -71,10 +70,11 @@ Server runs on [http://localhost:5000](http://localhost:5000).
 
 ### Auth
 
-| Method | Endpoint    | Description           |
-| ------ | ----------- | --------------------- |
-| POST   | `/login`    | Login and receive JWT |
-| POST   | `/register` | Register a new user   |
+| Method | Endpoint    | Description                    |
+| ------ | ----------- | ------------------------------ |
+| GET    | `/auth/salt`| Fetch per-user vault KDF salt  |
+| POST   | `/login`    | Login with auth hash, get JWT  |
+| POST   | `/register` | Register with auth hash + salt |
 
 ### Profile
 
@@ -113,8 +113,8 @@ vault-server/
 │   │   └── routes.ts
 │   ├── types/                # TypeScript interfaces
 │   │   └── interface.ts
-│   ├── utils/                # Crypto helpers
-│   │   └── crypto.ts
+│   ├── utils/                # Helpers
+│   │   └── passwordStrength.ts
 │   ├── validators/           # express-validator schemas
 │   │   └── validators.ts
 │   └── app.ts                # Entry point
@@ -124,6 +124,8 @@ vault-server/
 ├── package.json
 └── tsconfig.json
 ```
+
+Vault entry passwords are encrypted on the client. The API stores and returns opaque `password` ciphertext and `iv` only.
 
 ## Related
 

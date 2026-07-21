@@ -54,6 +54,7 @@ const userData = new mongoose.Schema({
   email: String,
   password: String,
   name: String,
+  vaultSalt: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   settings: { type: userSettingsSchema, default: () => ({}) },
   securityMetadata: { type: securityMetadataSchema, default: () => ({}) },

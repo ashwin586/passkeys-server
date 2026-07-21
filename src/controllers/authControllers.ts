@@ -10,7 +10,36 @@ const asPlainObject = (value: any) => {
   return value.toObject ? value.toObject() : value;
 };
 
+const dummySaltForEmail = (email: string) =>
+  crypto
+    .createHash("sha256")
+    .update(`vault-salt-dummy:${email.toLowerCase()}`)
+    .digest("hex")
+    .slice(0, 32);
+
 const authControllers = {
+  getSalt: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const email = String(req.query.email || "")
+        .trim()
+        .toLowerCase();
+      if (!email) {
+        res.status(400).json({ message: "Email is required" });
+        return;
+      }
+
+      const existingUser = await User.findOne({ email });
+      res.status(200).json({
+        salt: existingUser?.vaultSalt || dummySaltForEmail(email),
+      });
+      return;
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal Server Error" });
+      return;
+    }
+  },
+
   login: async (
     req: Request<{}, {}, authInterface>,
     res: Response,
@@ -76,7 +105,11 @@ const authControllers = {
         expiresIn: "30m",
       });
 
-      res.status(200).json({ message: "Login Successful", token: accesToken });
+      res.status(200).json({
+        message: "Login Successful",
+        token: accesToken,
+        vaultSalt: existingUser.vaultSalt,
+      });
       return;
     } catch (error) {
       console.error(error);
@@ -89,8 +122,13 @@ const authControllers = {
     req: Request<{}, {}, authInterface>,
     res: Response,
   ): Promise<void> => {
-    const { email, password } = req.body;
+    const { email, password, vaultSalt } = req.body;
     try {
+      if (!vaultSalt) {
+        res.status(400).json({ message: "vaultSalt is required" });
+        return;
+      }
+
       const existingUser = await User.findOne({ email: email });
       if (existingUser) {
         res
@@ -104,6 +142,7 @@ const authControllers = {
         name,
         email,
         password: hashedPassword,
+        vaultSalt,
         securityMetadata: {
           lastLoginAt: null,
           previousLoginAt: null,

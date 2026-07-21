@@ -1,8 +1,6 @@
 import { Response } from "express";
 import User from "../models/users";
 import SavedPassword from "../models/savedPasswords";
-import { decrypt, encrypt } from "../utils/crypto";
-import { calculateStrength } from "../utils/passwordStrength";
 import { AuthRequest, securitySummaryInterface } from "../types/interface";
 import bcrypt from "bcrypt";
 
@@ -54,42 +52,22 @@ const findCurrentUser = async (email?: string) => {
   return User.findOne({ email });
 };
 
-const buildSecuritySummary = async (
+const buildSecuritySummary = (
   user: any,
-  activeSessions: number
-): Promise<securitySummaryInterface> => {
-  const savedPasswords = await SavedPassword.find({ user: user._id });
-  const decryptedPasswords = savedPasswords.map((entry) =>
-    decrypt(entry.password, entry.iv)
-  );
-  const scores = decryptedPasswords.map((password) =>
-    calculateStrength(password)
-  );
-  const passwordHealthScore =
-    scores.length > 0
-      ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length)
-      : null;
-  const weakPasswordCount = scores.filter((score) => score < 40).length;
-
-  const passwordUsage = new Map<string, number>();
-  for (const password of decryptedPasswords) {
-    passwordUsage.set(password, (passwordUsage.get(password) || 0) + 1);
-  }
-  const reusedPasswordCount = [...passwordUsage.values()].filter(
-    (count) => count > 1
-  ).length;
-
-  return {
-    accountStatus: activeSessions > 0 ? "Protected" : "Session inactive",
-    encryptionStatus:
-      savedPasswords.length > 0 ? "Active" : "Ready (no vault entries)",
-    passwordHealthScore,
-    savedPasswordCount: savedPasswords.length,
-    weakPasswordCount,
-    reusedPasswordCount,
-    maskingEnabled: Boolean(user.settings?.maskSensitiveData),
-  };
-};
+  activeSessions: number,
+  savedPasswordCount: number
+): securitySummaryInterface => ({
+  accountStatus: activeSessions > 0 ? "Protected" : "Session inactive",
+  encryptionStatus:
+    savedPasswordCount > 0
+      ? "Client-side zero-knowledge"
+      : "Ready (no vault entries)",
+  passwordHealthScore: null,
+  savedPasswordCount,
+  weakPasswordCount: 0,
+  reusedPasswordCount: 0,
+  maskingEnabled: Boolean(user.settings?.maskSensitiveData),
+});
 
 const profileControllers = {
   fetchProfile: async (req: AuthRequest, res: Response) => {
@@ -105,7 +83,14 @@ const profileControllers = {
       const activeSessions = user.sessions.filter(
         (session: any) => session.active
       ).length;
-      const securitySummary = await buildSecuritySummary(user, activeSessions);
+      const savedPasswordCount = await SavedPassword.countDocuments({
+        user: user._id,
+      });
+      const securitySummary = buildSecuritySummary(
+        user,
+        activeSessions,
+        savedPasswordCount
+      );
       const userDetails = {
         name: user.name,
         email: user.email,
@@ -134,7 +119,7 @@ const profileControllers = {
 
       ensureUserDefaults(user);
 
-      const { name, currentPassword, newPassword } = req.body;
+      const { name, currentPassword, newPassword, vaultSalt } = req.body;
       let hasChanges = false;
 
       if (name !== undefined && name !== user.name) {
@@ -151,7 +136,12 @@ const profileControllers = {
             .json({ message: "Incorrect current password, Try again" });
           return;
         }
+        if (!vaultSalt) {
+          res.status(400).json({ message: "vaultSalt is required" });
+          return;
+        }
         user.password = await bcrypt.hash(newPassword, 10);
+        user.vaultSalt = vaultSalt;
         user.securityMetadata.lastPasswordUpdatedAt = new Date();
         appendActivity(user, "password_change", "Password changed successfully");
         hasChanges = true;
@@ -270,7 +260,8 @@ const profileControllers = {
         name: credentials?.name,
         url: credentials.url,
         userName: credentials.userName,
-        password: decrypt(credentials.password, credentials.iv),
+        password: credentials.password,
+        iv: credentials.iv,
       }));
       res.status(200).json({ passwords: userCredentials });
       return;
@@ -282,7 +273,7 @@ const profileControllers = {
 
   addPasswords: async (req: AuthRequest, res: Response) => {
     try {
-      const { name, password, url, userName } = req.body;
+      const { name, password, url, userName, iv } = req.body;
       const user = req.user;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
@@ -290,15 +281,13 @@ const profileControllers = {
         return;
       }
 
-      const { iv, encryptedData } = encrypt(password);
-
       const appDetails = new SavedPassword({
         user: userDoc._id,
         name,
         url,
         userName,
         iv,
-        password: encryptedData,
+        password,
       });
 
       await appDetails.save();
@@ -309,7 +298,8 @@ const profileControllers = {
           name: appDetails.name,
           url: appDetails.url,
           userName: appDetails.userName,
-          password: decrypt(appDetails.password, appDetails.iv),
+          password: appDetails.password,
+          iv: appDetails.iv,
         },
       });
       return;
@@ -322,7 +312,7 @@ const profileControllers = {
   updatePasswords: async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user;
-      const { name, password, url, userName } = req.body;
+      const { name, password, url, userName, iv } = req.body;
       const { id } = req.params;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
@@ -330,14 +320,13 @@ const profileControllers = {
         return;
       }
 
-      const { iv, encryptedData } = encrypt(password);
       const updatedDetails = {
         user: userDoc._id,
         name,
         url,
         userName,
         iv,
-        password: encryptedData,
+        password,
       };
       const response = await SavedPassword.findOneAndUpdate(
         { _id: id, user: userDoc._id },
@@ -354,7 +343,8 @@ const profileControllers = {
           id: response?._id,
           name: response?.name,
           userName: response?.userName,
-          password: decrypt(response.password, response.iv),
+          password: response.password,
+          iv: response.iv,
           url: response?.url,
         },
       });
@@ -406,7 +396,13 @@ const profileControllers = {
         return;
       }
       for (const entry of csvData) {
-        if (!entry.name || !entry.url || !entry.username || !entry.password) {
+        if (
+          !entry.name ||
+          !entry.url ||
+          !entry.username ||
+          !entry.password ||
+          !entry.iv
+        ) {
           skipped++;
           continue;
         }
@@ -419,14 +415,13 @@ const profileControllers = {
           skipped++;
           continue;
         }
-        const { iv, encryptedData } = encrypt(entry.password);
         const appDetails = new SavedPassword({
           user: userDoc._id,
           name: entry.name,
           url: entry.url,
           userName: entry.username,
-          iv,
-          password: encryptedData,
+          iv: entry.iv,
+          password: entry.password,
         });
         await appDetails.save();
         savedEntries.push({
@@ -434,7 +429,8 @@ const profileControllers = {
           name: appDetails.name,
           url: appDetails.url,
           userName: appDetails.userName,
-          password: decrypt(appDetails.password, appDetails.iv),
+          password: appDetails.password,
+          iv: appDetails.iv,
         });
       }
       res.status(200).json({

@@ -3,6 +3,8 @@ import authControllers from "../controllers/authControllers";
 import profileControllers from "../controllers/profileControllers";
 import {
   authValidator,
+  registerValidator,
+  saltQueryValidator,
   importCSVValidator,
   passwordIdValidator,
   passwordValidators,
@@ -15,10 +17,16 @@ import validateJwt from "../middleware/validateJWT";
 const routes = Router();
 
 // Authentication Routes
+routes.get(
+  "/auth/salt",
+  saltQueryValidator,
+  validateRequest,
+  authControllers.getSalt,
+);
 routes.post("/login", authValidator, validateRequest, authControllers.login);
 routes.post(
   "/register",
-  authValidator,
+  registerValidator,
   validateRequest,
   authControllers.register,
 );

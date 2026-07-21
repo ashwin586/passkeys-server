@@ -5,6 +5,7 @@ export interface userInterface {
   name: string;
   email: string;
   password: string;
+  vaultSalt: string;
   createdAt: Date;
   settings?: userSettingsInterface;
   securityMetadata?: securityMetadataInterface;
@@ -15,6 +16,7 @@ export interface userInterface {
 export interface authInterface {
   email: string;
   password: string;
+  vaultSalt?: string;
 }
 
 export interface payloadInterface {

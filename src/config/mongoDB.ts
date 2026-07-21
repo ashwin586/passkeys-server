@@ -10,5 +10,6 @@ export default async function mongoDb() {
     console.log("Connected to DB");
   } catch (error: any) {
     console.error("MongoDB error:", error);
+    process.exit(1);
   }
 }
