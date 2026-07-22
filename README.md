@@ -50,8 +50,13 @@ Create a `.env` file in the root:
 ```env
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/vault
-JWT_SECRET=your_jwt_secret_here
+JWT_SECRET=generate_with_openssl_rand_hex_32
+JWT_EXPIRES_IN=30m
+COOKIE_SAMESITE=none
+COOKIE_SECURE=true
 ```
+
+`JWT_SECRET` must be at least 32 characters. Auth tokens are stored in an `httpOnly` cookie (`vault_access_token`) with `Secure` and `SameSite=None` so the cross-origin SPA can send them via `credentials: include`.
 
 ### Running the Server
 
@@ -70,11 +75,12 @@ Server runs on [http://localhost:5000](http://localhost:5000).
 
 ### Auth
 
-| Method | Endpoint    | Description                    |
-| ------ | ----------- | ------------------------------ |
-| GET    | `/auth/salt`| Fetch per-user vault KDF salt  |
-| POST   | `/login`    | Login with auth hash, get JWT  |
-| POST   | `/register` | Register with auth hash + salt |
+| Method | Endpoint     | Description                                      |
+| ------ | ------------ | ------------------------------------------------ |
+| GET    | `/auth/salt` | Fetch per-user vault KDF salt                    |
+| POST   | `/login`     | Login with auth hash; sets httpOnly access cookie |
+| POST   | `/register`  | Register with auth hash + salt                   |
+| POST   | `/logout`    | Clear auth cookie and revoke current session     |
 
 ### Profile
 

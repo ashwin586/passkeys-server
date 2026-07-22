@@ -3,7 +3,12 @@ import User from "../models/users";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { userInterface, authInterface } from "../types/interface";
+import { userInterface, authInterface, AuthRequest } from "../types/interface";
+import {
+  clearAuthCookie,
+  getJwtExpiresIn,
+  setAuthCookie,
+} from "../utils/authCookies";
 
 const asPlainObject = (value: any) => {
   if (!value) return {};
@@ -101,19 +106,55 @@ const authControllers = {
         role: "user",
         sessionId,
       };
-      const accesToken = jwt.sign(payload, process.env.JWT_SECRET!, {
-        expiresIn: "30m",
-      });
+      const accessToken = jwt.sign(payload, process.env.JWT_SECRET!, {
+        expiresIn: getJwtExpiresIn(),
+      } as jwt.SignOptions);
+
+      setAuthCookie(res, accessToken);
 
       res.status(200).json({
         message: "Login Successful",
-        token: accesToken,
         vaultSalt: existingUser.vaultSalt,
+        expiresIn: getJwtExpiresIn(),
       });
       return;
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });
+      return;
+    }
+  },
+
+  logout: async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const email = req.user?.email;
+      const sessionId = req.user?.sessionId;
+
+      if (email && sessionId) {
+        const user: any = await User.findOne({ email });
+        if (user?.sessions) {
+          user.sessions = user.sessions.map((session: any) => {
+            if (session.sessionId === sessionId) {
+              return {
+                ...session.toObject?.(),
+                ...session,
+                active: false,
+                lastSeenAt: new Date(),
+              };
+            }
+            return session;
+          });
+          await user.save();
+        }
+      }
+
+      clearAuthCookie(res);
+      res.status(200).json({ message: "Logged out successfully" });
+      return;
+    } catch (error) {
+      console.error(error);
+      clearAuthCookie(res);
+      res.status(200).json({ message: "Logged out successfully" });
       return;
     }
   },

@@ -7,6 +7,9 @@ import cookieParser from "cookie-parser";
 import mongoDb from "./config/mongoDB";
 import routes from "./routes/routes";
 import corsOptions from "./config/cors";
+import { assertJwtSecret } from "./utils/authCookies";
+
+assertJwtSecret();
 
 const app = express();
 

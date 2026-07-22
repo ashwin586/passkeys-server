@@ -13,6 +13,7 @@ import {
 } from "../validators/validators";
 import validateRequest from "../middleware/validateRequest";
 import validateJwt from "../middleware/validateJWT";
+import optionalJwt from "../middleware/optionalJwt";
 
 const routes = Router();
 
@@ -30,6 +31,7 @@ routes.post(
   validateRequest,
   authControllers.register,
 );
+routes.post("/logout", optionalJwt, authControllers.logout);
 
 // Profile
 routes.get("/profile", validateJwt, profileControllers.fetchProfile);

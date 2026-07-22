@@ -3,6 +3,7 @@ import User from "../models/users";
 import SavedPassword from "../models/savedPasswords";
 import { AuthRequest, securitySummaryInterface } from "../types/interface";
 import bcrypt from "bcrypt";
+import { clearAuthCookie } from "../utils/authCookies";
 
 const DEFAULT_SETTINGS = {
   autoLockTimeout: 15,
@@ -236,6 +237,7 @@ const profileControllers = {
       appendActivity(user, "session_revoke", "Signed out from all devices");
       await user.save();
 
+      clearAuthCookie(res);
       res.status(200).json({ message: "All sessions signed out successfully" });
       return;
     } catch (error) {
