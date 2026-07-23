@@ -1,25 +1,37 @@
 import { body, check, param, query } from "express-validator";
+import {
+  ValidationBounds,
+  ValidationMessages,
+} from "../constants/validation.constants";
 
 export const authValidator = [
-  check("email").isEmail().withMessage("Incorrect email and password"),
+  check("email")
+    .isEmail()
+    .withMessage(ValidationMessages.INCORRECT_EMAIL_OR_PASSWORD),
   check("password")
     .notEmpty()
-    .isLength({ min: 64, max: 64 })
-    .matches(/^[a-f0-9]+$/i)
-    .withMessage("Incorrect email and password"),
+    .isLength({
+      min: ValidationBounds.AUTH_HASH_LENGTH,
+      max: ValidationBounds.AUTH_HASH_LENGTH,
+    })
+    .matches(ValidationBounds.HEX_PATTERN)
+    .withMessage(ValidationMessages.INCORRECT_EMAIL_OR_PASSWORD),
 ];
 
 export const registerValidator = [
   ...authValidator,
   check("vaultSalt")
     .notEmpty()
-    .isLength({ min: 32, max: 32 })
-    .matches(/^[a-f0-9]+$/i)
-    .withMessage("Invalid vault salt"),
+    .isLength({
+      min: ValidationBounds.VAULT_SALT_LENGTH,
+      max: ValidationBounds.VAULT_SALT_LENGTH,
+    })
+    .matches(ValidationBounds.HEX_PATTERN)
+    .withMessage(ValidationMessages.INVALID_VAULT_SALT),
 ];
 
 export const saltQueryValidator = [
-  query("email").isEmail().withMessage("Valid email is required"),
+  query("email").isEmail().withMessage(ValidationMessages.VALID_EMAIL_REQUIRED),
 ];
 
 export const profileValidators = [
@@ -27,29 +39,27 @@ export const profileValidators = [
     const hasName = Object.prototype.hasOwnProperty.call(value, "name");
     const hasCurrentPassword = Object.prototype.hasOwnProperty.call(
       value,
-      "currentPassword"
+      "currentPassword",
     );
     const hasNewPassword = Object.prototype.hasOwnProperty.call(
       value,
-      "newPassword"
+      "newPassword",
     );
     const hasVaultSalt = Object.prototype.hasOwnProperty.call(
       value,
-      "vaultSalt"
+      "vaultSalt",
     );
 
     if (!hasName && !hasCurrentPassword && !hasNewPassword) {
-      throw new Error("No changes provided");
+      throw new Error(ValidationMessages.NO_CHANGES_PROVIDED);
     }
 
     if (hasCurrentPassword !== hasNewPassword) {
-      throw new Error(
-        "Both currentPassword and newPassword are required for password change"
-      );
+      throw new Error(ValidationMessages.PASSWORD_CHANGE_BOTH_REQUIRED);
     }
 
     if (hasCurrentPassword && hasNewPassword && !hasVaultSalt) {
-      throw new Error("vaultSalt is required when changing password");
+      throw new Error(ValidationMessages.VAULT_SALT_REQUIRED_ON_PASSWORD_CHANGE);
     }
 
     return true;
@@ -58,113 +68,141 @@ export const profileValidators = [
     .optional()
     .trim()
     .notEmpty()
-    .withMessage("Name is required")
-    .isLength({ min: 4 })
-    .withMessage("Name should be at least 4 characters")
-    .matches(/^[A-Za-z][A-Za-z\s]*$/)
-    .withMessage(
-      "Name must start with a letter and contain only letters and spaces"
-    ),
+    .withMessage(ValidationMessages.NAME_REQUIRED)
+    .isLength({ min: ValidationBounds.NAME_MIN })
+    .withMessage(ValidationMessages.NAME_MIN_LENGTH)
+    .matches(ValidationBounds.NAME_PATTERN)
+    .withMessage(ValidationMessages.NAME_PATTERN),
   check("currentPassword")
     .optional()
     .trim()
-    .isLength({ min: 64, max: 64 })
-    .matches(/^[a-f0-9]+$/i)
-    .withMessage("Invalid current password verifier"),
+    .isLength({
+      min: ValidationBounds.AUTH_HASH_LENGTH,
+      max: ValidationBounds.AUTH_HASH_LENGTH,
+    })
+    .matches(ValidationBounds.HEX_PATTERN)
+    .withMessage(ValidationMessages.INVALID_CURRENT_PASSWORD_VERIFIER),
   check("newPassword")
     .optional()
     .trim()
-    .isLength({ min: 64, max: 64 })
-    .matches(/^[a-f0-9]+$/i)
-    .withMessage("Invalid new password verifier"),
+    .isLength({
+      min: ValidationBounds.AUTH_HASH_LENGTH,
+      max: ValidationBounds.AUTH_HASH_LENGTH,
+    })
+    .matches(ValidationBounds.HEX_PATTERN)
+    .withMessage(ValidationMessages.INVALID_NEW_PASSWORD_VERIFIER),
   check("vaultSalt")
     .optional()
-    .isLength({ min: 32, max: 32 })
-    .matches(/^[a-f0-9]+$/i)
-    .withMessage("Invalid vault salt"),
+    .isLength({
+      min: ValidationBounds.VAULT_SALT_LENGTH,
+      max: ValidationBounds.VAULT_SALT_LENGTH,
+    })
+    .matches(ValidationBounds.HEX_PATTERN)
+    .withMessage(ValidationMessages.INVALID_VAULT_SALT),
 ];
 
 export const settingsValidators = [
   check("autoLockTimeout")
     .optional()
-    .isInt({ min: 5, max: 60 })
-    .withMessage("autoLockTimeout must be between 5 and 60"),
+    .isInt({
+      min: ValidationBounds.AUTO_LOCK_MIN,
+      max: ValidationBounds.AUTO_LOCK_MAX,
+    })
+    .withMessage(ValidationMessages.AUTO_LOCK_RANGE),
   check("clipboardTimer")
     .optional()
-    .isInt({ min: 10, max: 120 })
-    .withMessage("clipboardTimer must be between 10 and 120"),
+    .isInt({
+      min: ValidationBounds.CLIPBOARD_MIN,
+      max: ValidationBounds.CLIPBOARD_MAX,
+    })
+    .withMessage(ValidationMessages.CLIPBOARD_TIMER_RANGE),
   check("maskSensitiveData")
     .optional()
     .isBoolean()
-    .withMessage("maskSensitiveData must be a boolean"),
+    .withMessage(ValidationMessages.MASK_SENSITIVE_BOOLEAN),
   check("securityReminders")
     .optional()
     .isBoolean()
-    .withMessage("securityReminders must be a boolean"),
+    .withMessage(ValidationMessages.SECURITY_REMINDERS_BOOLEAN),
   check("lockOnClose")
     .optional()
     .isBoolean()
-    .withMessage("lockOnClose must be a boolean"),
+    .withMessage(ValidationMessages.LOCK_ON_CLOSE_BOOLEAN),
   check("themePreference")
     .optional()
-    .isIn(["System default", "Dark", "Light"])
-    .withMessage("Invalid themePreference"),
+    .isIn([...ValidationBounds.THEME_OPTIONS])
+    .withMessage(ValidationMessages.INVALID_THEME),
   check("notifications")
     .optional()
     .isBoolean()
-    .withMessage("notifications must be a boolean"),
+    .withMessage(ValidationMessages.NOTIFICATIONS_BOOLEAN),
   check("generatorLength")
     .optional()
-    .isInt({ min: 8, max: 50 })
-    .withMessage("generatorLength must be between 8 and 50"),
+    .isInt({
+      min: ValidationBounds.GENERATOR_LENGTH_MIN,
+      max: ValidationBounds.GENERATOR_LENGTH_MAX,
+    })
+    .withMessage(ValidationMessages.GENERATOR_LENGTH_RANGE),
   check("generatorSymbols")
     .optional()
     .isBoolean()
-    .withMessage("generatorSymbols must be a boolean"),
+    .withMessage(ValidationMessages.GENERATOR_SYMBOLS_BOOLEAN),
   check("generatorNumbers")
     .optional()
     .isBoolean()
-    .withMessage("generatorNumbers must be a boolean"),
+    .withMessage(ValidationMessages.GENERATOR_NUMBERS_BOOLEAN),
   check("generatorUppercase")
     .optional()
     .isBoolean()
-    .withMessage("generatorUppercase must be a boolean"),
+    .withMessage(ValidationMessages.GENERATOR_UPPERCASE_BOOLEAN),
   check("generatorLowercase")
     .optional()
     .isBoolean()
-    .withMessage("generatorLowercase must be a boolean"),
+    .withMessage(ValidationMessages.GENERATOR_LOWERCASE_BOOLEAN),
   check("language")
     .optional()
     .isString()
-    .isLength({ min: 2, max: 30 })
-    .withMessage("language must be between 2 and 30 characters"),
+    .isLength({
+      min: ValidationBounds.LANGUAGE_MIN,
+      max: ValidationBounds.LANGUAGE_MAX,
+    })
+    .withMessage(ValidationMessages.LANGUAGE_LENGTH),
 ];
 
 export const passwordValidators = [
-  check("name").trim().notEmpty().withMessage("App Name is required"),
-  check("url").trim().notEmpty().withMessage("URL is required"),
+  check("name")
+    .trim()
+    .notEmpty()
+    .withMessage(ValidationMessages.APP_NAME_REQUIRED),
+  check("url").trim().notEmpty().withMessage(ValidationMessages.URL_REQUIRED),
   check("userName")
     .trim()
     .notEmpty()
-    .withMessage("Username or Email is required"),
+    .withMessage(ValidationMessages.USERNAME_REQUIRED),
   check("password")
     .trim()
-    .matches(/^[a-f0-9]+$/i)
-    .isLength({ min: 32, max: 8192 })
-    .withMessage("Invalid encrypted password payload"),
+    .matches(ValidationBounds.HEX_PATTERN)
+    .isLength({
+      min: ValidationBounds.CIPHERTEXT_MIN,
+      max: ValidationBounds.CIPHERTEXT_MAX,
+    })
+    .withMessage(ValidationMessages.INVALID_ENCRYPTED_PASSWORD),
   check("iv")
     .trim()
-    .matches(/^[a-f0-9]+$/i)
-    .isLength({ min: 24, max: 24 })
-    .withMessage("Invalid encryption IV"),
+    .matches(ValidationBounds.HEX_PATTERN)
+    .isLength({
+      min: ValidationBounds.IV_LENGTH,
+      max: ValidationBounds.IV_LENGTH,
+    })
+    .withMessage(ValidationMessages.INVALID_ENCRYPTION_IV),
 ];
 
 export const passwordIdValidator = [
-  param("id").isMongoId().withMessage("Invalid credential id"),
+  param("id").isMongoId().withMessage(ValidationMessages.INVALID_CREDENTIAL_ID),
 ];
 
 export const importCSVValidator = [
   body("csvData")
     .isArray({ min: 1 })
-    .withMessage("csvData must be a non-empty array"),
+    .withMessage(ValidationMessages.CSV_DATA_NON_EMPTY),
 ];

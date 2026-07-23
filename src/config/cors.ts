@@ -1,4 +1,7 @@
-const allowLists = ["http://localhost:3000"];
+import { CorsDefaults } from "../constants/app.constants";
+import { ErrorMessages } from "../constants/messages.constants";
+
+const allowLists = CorsDefaults.ALLOWED_ORIGINS;
 
 const corsOptions = {
   origin: (origin: any, callback: any) => {
@@ -6,7 +9,7 @@ const corsOptions = {
     if (allowLists.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(new Error(ErrorMessages.CORS_NOT_ALLOWED));
     }
   },
   credentials: true,

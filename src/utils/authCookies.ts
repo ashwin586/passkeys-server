@@ -1,11 +1,14 @@
 import { CookieOptions, Response } from "express";
+import {
+  AuthCookie,
+  AuthMessages,
+  JwtDefaults,
+} from "../constants/auth.constants";
 
-export const AUTH_COOKIE_NAME = "vault_access_token";
-
-const ACCESS_TOKEN_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+export const AUTH_COOKIE_NAME = AuthCookie.NAME;
 
 export const getJwtExpiresIn = (): string =>
-  process.env.JWT_EXPIRES_IN || "30m";
+  process.env.JWT_EXPIRES_IN || JwtDefaults.EXPIRES_IN;
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -14,11 +17,13 @@ const isProduction = process.env.NODE_ENV === "production";
  * Secure cookies are allowed on localhost in modern browsers.
  */
 const getCookieOptions = (maxAge?: number): CookieOptions => {
-  const sameSiteEnv = (process.env.COOKIE_SAMESITE || "none").toLowerCase();
+  const sameSiteEnv = (
+    process.env.COOKIE_SAMESITE || AuthCookie.DEFAULT_SAMESITE
+  ).toLowerCase();
   const sameSite: CookieOptions["sameSite"] =
     sameSiteEnv === "strict" || sameSiteEnv === "lax" || sameSiteEnv === "none"
       ? sameSiteEnv
-      : "none";
+      : AuthCookie.DEFAULT_SAMESITE;
 
   // SameSite=None requires Secure. Default Secure=true so cross-origin SPA auth works
   // on localhost and in production. Override with COOKIE_SECURE=false only if needed.
@@ -34,8 +39,8 @@ const getCookieOptions = (maxAge?: number): CookieOptions => {
     httpOnly: true,
     secure,
     sameSite,
-    path: "/",
-    maxAge: maxAge ?? ACCESS_TOKEN_MAX_AGE_MS,
+    path: AuthCookie.PATH,
+    maxAge: maxAge ?? JwtDefaults.ACCESS_TOKEN_MAX_AGE_MS,
   };
 };
 
@@ -52,9 +57,7 @@ export const clearAuthCookie = (res: Response) => {
 
 export const assertJwtSecret = () => {
   const secret = process.env.JWT_SECRET || "";
-  if (secret.length < 32) {
-    throw new Error(
-      "JWT_SECRET must be at least 32 characters. Generate one with: openssl rand -hex 32",
-    );
+  if (secret.length < JwtDefaults.MIN_SECRET_LENGTH) {
+    throw new Error(AuthMessages.JWT_SECRET_TOO_SHORT);
   }
 };

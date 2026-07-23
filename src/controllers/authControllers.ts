@@ -13,6 +13,15 @@ import {
   createSessionRecord,
   revokeSession,
 } from "../utils/sessions";
+import { AuthMessages, AuthRole } from "../constants/auth.constants";
+import { ErrorMessages } from "../constants/messages.constants";
+import { ActivityTypes, AppDefaults } from "../constants/app.constants";
+import {
+  BcryptConfig,
+  CryptoLengths,
+  DummySalt,
+} from "../constants/security.constants";
+import { HttpStatus } from "../constants/http.constants";
 
 const asPlainObject = (value: any) => {
   if (!value) return {};
@@ -22,9 +31,9 @@ const asPlainObject = (value: any) => {
 const dummySaltForEmail = (email: string) =>
   crypto
     .createHash("sha256")
-    .update(`vault-salt-dummy:${email.toLowerCase()}`)
+    .update(`${DummySalt.PREFIX}${email.toLowerCase()}`)
     .digest("hex")
-    .slice(0, 32);
+    .slice(0, CryptoLengths.VAULT_SALT_HEX);
 
 const authControllers = {
   getSalt: async (req: Request, res: Response): Promise<void> => {
@@ -33,18 +42,22 @@ const authControllers = {
         .trim()
         .toLowerCase();
       if (!email) {
-        res.status(400).json({ message: "Email is required" });
+        res
+          .status(HttpStatus.BAD_REQUEST)
+          .json({ message: AuthMessages.EMAIL_REQUIRED });
         return;
       }
 
       const existingUser = await User.findOne({ email });
-      res.status(200).json({
+      res.status(HttpStatus.OK).json({
         salt: existingUser?.vaultSalt || dummySaltForEmail(email),
       });
       return;
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
       return;
     }
   },
@@ -59,23 +72,21 @@ const authControllers = {
         email: email,
       });
 
-      if (!existingUser) {
-        res.status(404).json({ message: "User not found." });
-        return;
-      }
+      const hashToCompare =
+        existingUser?.password || process.env.DUMMY_PASSWORD_HASH!;
+      const isCredentials = await bcrypt.compare(password, hashToCompare);
 
-      const isCredentials = await bcrypt.compare(
-        password,
-        existingUser?.password,
-      );
-      if (!isCredentials) {
-        res.status(401).json({ message: "Incorrect email or password." });
+      if (!existingUser || !isCredentials) {
+        res
+          .status(HttpStatus.UNAUTHORIZED)
+          .json({ message: AuthMessages.INVALID_CREDENTIALS });
         return;
       }
 
       const now = new Date();
       const session = createSessionRecord(req);
-      const previousLoginAt = existingUser?.securityMetadata?.lastLoginAt || null;
+      const previousLoginAt =
+        existingUser?.securityMetadata?.lastLoginAt || null;
       existingUser.securityMetadata = {
         ...asPlainObject(existingUser.securityMetadata),
         previousLoginAt,
@@ -84,22 +95,22 @@ const authControllers = {
       };
       existingUser.sessions = [session, ...(existingUser.sessions || [])].slice(
         0,
-        20,
+        AppDefaults.SESSION_HISTORY_LIMIT,
       );
       existingUser.activity = [
         {
-          type: "login",
-          message: "Successful login",
+          type: ActivityTypes.LOGIN,
+          message: AuthMessages.ACTIVITY_SUCCESSFUL_LOGIN,
           createdAt: now,
         },
         ...(existingUser.activity || []),
-      ].slice(0, 20);
+      ].slice(0, AppDefaults.ACTIVITY_HISTORY_LIMIT);
 
       await existingUser.save();
 
       const payload = {
         email: existingUser?.email,
-        role: "user",
+        role: AuthRole.USER,
         sessionId: session.sessionId,
       };
       const accessToken = jwt.sign(payload, process.env.JWT_SECRET!, {
@@ -108,15 +119,17 @@ const authControllers = {
 
       setAuthCookie(res, accessToken);
 
-      res.status(200).json({
-        message: "Login Successful",
+      res.status(HttpStatus.OK).json({
+        message: AuthMessages.LOGIN_SUCCESS,
         vaultSalt: existingUser.vaultSalt,
         expiresIn: getJwtExpiresIn(),
       });
       return;
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
       return;
     }
   },
@@ -135,12 +148,16 @@ const authControllers = {
       }
 
       clearAuthCookie(res);
-      res.status(200).json({ message: "Logged out successfully" });
+      res
+        .status(HttpStatus.OK)
+        .json({ message: AuthMessages.LOGOUT_SUCCESS });
       return;
     } catch (error) {
       console.error(error);
       clearAuthCookie(res);
-      res.status(200).json({ message: "Logged out successfully" });
+      res
+        .status(HttpStatus.OK)
+        .json({ message: AuthMessages.LOGOUT_SUCCESS });
       return;
     }
   },
@@ -150,20 +167,26 @@ const authControllers = {
     res: Response,
   ): Promise<void> => {
     const { email, password, vaultSalt } = req.body;
+
     try {
       if (!vaultSalt) {
-        res.status(400).json({ message: "vaultSalt is required" });
+        res
+          .status(HttpStatus.BAD_REQUEST)
+          .json({ message: AuthMessages.VAULT_SALT_REQUIRED });
         return;
       }
 
       const existingUser = await User.findOne({ email: email });
       if (existingUser) {
+        // Burn similar work so existence is harder to infer from timing.
+        await bcrypt.hash(password, BcryptConfig.ROUNDS);
         res
-          .status(409)
-          .json({ message: "Email already registered, Please login." });
+          .status(HttpStatus.CREATED)
+          .json({ message: AuthMessages.REGISTER_SUCCESS });
         return;
       }
-      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const hashedPassword = await bcrypt.hash(password, BcryptConfig.ROUNDS);
       const name = email.split("@")[0];
       const newUser = new User({
         name,
@@ -178,11 +201,15 @@ const authControllers = {
         },
       });
       await newUser.save();
-      res.status(201).json({ message: "User added successfuly" });
+      res
+        .status(HttpStatus.CREATED)
+        .json({ message: AuthMessages.REGISTER_SUCCESS });
       return;
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
       return;
     }
   },

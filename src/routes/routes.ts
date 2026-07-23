@@ -14,76 +14,96 @@ import {
 import validateRequest from "../middleware/validateRequest";
 import validateJwt from "../middleware/validateJWT";
 import optionalJwt from "../middleware/optionalJwt";
+import {
+  loginAccountLimiter,
+  loginIpLimiter,
+  registerIpLimiter,
+  saltIpLimiter,
+} from "../middleware/rateLimit";
+import { ApiRoutes } from "../constants/routes.constants";
 
 const routes = Router();
 
 // Authentication Routes
 routes.get(
-  "/auth/salt",
+  ApiRoutes.AUTH_SALT,
+  saltIpLimiter,
   saltQueryValidator,
   validateRequest,
   authControllers.getSalt,
 );
-routes.post("/login", authValidator, validateRequest, authControllers.login);
 routes.post(
-  "/register",
+  ApiRoutes.LOGIN,
+  loginIpLimiter,
+  loginAccountLimiter,
+  authValidator,
+  validateRequest,
+  authControllers.login,
+);
+routes.post(
+  ApiRoutes.REGISTER,
+  registerIpLimiter,
   registerValidator,
   validateRequest,
   authControllers.register,
 );
-routes.post("/logout", optionalJwt, authControllers.logout);
+routes.post(ApiRoutes.LOGOUT, optionalJwt, authControllers.logout);
 
 // Profile
-routes.get("/profile", validateJwt, profileControllers.fetchProfile);
+routes.get(ApiRoutes.PROFILE, validateJwt, profileControllers.fetchProfile);
 routes.patch(
-  "/profile",
+  ApiRoutes.PROFILE,
   validateJwt,
   profileValidators,
   validateRequest,
-  profileControllers.updateProfile
+  profileControllers.updateProfile,
 );
 routes.patch(
-  "/profile/settings",
+  ApiRoutes.PROFILE_SETTINGS,
   validateJwt,
   settingsValidators,
   validateRequest,
-  profileControllers.updateSettings
-);
-routes.delete("/profile/sessions", validateJwt, profileControllers.logoutAllSessions);
-
-routes.get(
-  "/profile/managePasswords",
-  validateJwt,
-  profileControllers.fetchPasswords
-);
-routes.post(
-  "/profile/managePasswords",
-  validateJwt,
-  passwordValidators,
-  validateRequest,
-  profileControllers.addPasswords
-);
-routes.patch(
-  "/profile/managePasswords/:id",
-  validateJwt,
-  passwordIdValidator,
-  passwordValidators,
-  validateRequest,
-  profileControllers.updatePasswords
+  profileControllers.updateSettings,
 );
 routes.delete(
-  "/profile/managePasswords/:id",
+  ApiRoutes.PROFILE_SESSIONS,
+  validateJwt,
+  profileControllers.logoutAllSessions,
+);
+
+routes.get(
+  ApiRoutes.MANAGE_PASSWORDS,
+  validateJwt,
+  profileControllers.fetchPasswords,
+);
+routes.post(
+  ApiRoutes.MANAGE_PASSWORDS,
+  validateJwt,
+  passwordValidators,
+  validateRequest,
+  profileControllers.addPasswords,
+);
+routes.patch(
+  ApiRoutes.MANAGE_PASSWORD_BY_ID,
+  validateJwt,
+  passwordIdValidator,
+  passwordValidators,
+  validateRequest,
+  profileControllers.updatePasswords,
+);
+routes.delete(
+  ApiRoutes.MANAGE_PASSWORD_BY_ID,
   validateJwt,
   passwordIdValidator,
   validateRequest,
-  profileControllers.deletePasswords
+  profileControllers.deletePasswords,
 );
 
 routes.post(
-  "/profile/importCSV",
+  ApiRoutes.IMPORT_CSV,
   validateJwt,
   importCSVValidator,
   validateRequest,
-  profileControllers.importCSV
+  profileControllers.importCSV,
 );
 export default routes;

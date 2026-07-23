@@ -5,22 +5,22 @@ import { AuthRequest, securitySummaryInterface } from "../types/interface";
 import bcrypt from "bcrypt";
 import { clearAuthCookie } from "../utils/authCookies";
 import { revokeAllSessions } from "../utils/sessions";
-
-const DEFAULT_SETTINGS = {
-  autoLockTimeout: 15,
-  clipboardTimer: 30,
-  maskSensitiveData: true,
-  securityReminders: true,
-  lockOnClose: true,
-  themePreference: "System default",
-  notifications: true,
-  generatorLength: 18,
-  generatorSymbols: true,
-  generatorNumbers: true,
-  generatorUppercase: true,
-  generatorLowercase: true,
-  language: "English",
-};
+import {
+  ActivityTypes,
+  AppDefaults,
+  DefaultUserSettings,
+  SettingsFields,
+} from "../constants/app.constants";
+import { AuthMessages } from "../constants/auth.constants";
+import {
+  ActivityMessages,
+  ErrorMessages,
+  SecuritySummaryLabels,
+  SuccessMessages,
+  csvImportSuccessMessage,
+} from "../constants/messages.constants";
+import { BcryptConfig } from "../constants/security.constants";
+import { HttpStatus } from "../constants/http.constants";
 
 const asPlainObject = (value: any) => {
   if (!value) return {};
@@ -30,12 +30,12 @@ const asPlainObject = (value: any) => {
 const appendActivity = (user: any, type: string, message: string) => {
   const activity = Array.isArray(user.activity) ? user.activity : [];
   activity.unshift({ type, message, createdAt: new Date() });
-  user.activity = activity.slice(0, 20);
+  user.activity = activity.slice(0, AppDefaults.ACTIVITY_HISTORY_LIMIT);
 };
 
 const ensureUserDefaults = (user: any) => {
   user.settings = {
-    ...DEFAULT_SETTINGS,
+    ...DefaultUserSettings,
     ...asPlainObject(user.settings),
   };
   user.securityMetadata = {
@@ -57,13 +57,16 @@ const findCurrentUser = async (email?: string) => {
 const buildSecuritySummary = (
   user: any,
   activeSessions: number,
-  savedPasswordCount: number
+  savedPasswordCount: number,
 ): securitySummaryInterface => ({
-  accountStatus: activeSessions > 0 ? "Protected" : "Session inactive",
+  accountStatus:
+    activeSessions > 0
+      ? SecuritySummaryLabels.ACCOUNT_PROTECTED
+      : SecuritySummaryLabels.ACCOUNT_SESSION_INACTIVE,
   encryptionStatus:
     savedPasswordCount > 0
-      ? "Client-side zero-knowledge"
-      : "Ready (no vault entries)",
+      ? SecuritySummaryLabels.ENCRYPTION_ZERO_KNOWLEDGE
+      : SecuritySummaryLabels.ENCRYPTION_READY,
   passwordHealthScore: null,
   savedPasswordCount,
   weakPasswordCount: 0,
@@ -77,13 +80,15 @@ const profileControllers = {
       const userInfo = req.user;
       const user: any = await findCurrentUser(userInfo?.email);
       if (!user) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
       ensureUserDefaults(user);
       const activeSessions = user.sessions.filter(
-        (session: any) => session.active
+        (session: any) => session.active,
       ).length;
       const savedPasswordCount = await SavedPassword.countDocuments({
         user: user._id,
@@ -91,7 +96,7 @@ const profileControllers = {
       const securitySummary = buildSecuritySummary(
         user,
         activeSessions,
-        savedPasswordCount
+        savedPasswordCount,
       );
       const userDetails = {
         name: user.name,
@@ -100,14 +105,16 @@ const profileControllers = {
         settings: user.settings,
         securityMetadata: user.securityMetadata,
         activeSessions,
-        activity: user.activity.slice(0, 10),
+        activity: user.activity.slice(0, AppDefaults.PROFILE_ACTIVITY_PREVIEW_LIMIT),
         securitySummary,
       };
-      res.status(200).json({ user: userDetails });
+      res.status(HttpStatus.OK).json({ user: userDetails });
       return;
     } catch (error: unknown) {
       console.error("Fetch Profile Error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
     }
   },
   updateProfile: async (req: AuthRequest, res: Response) => {
@@ -115,7 +122,9 @@ const profileControllers = {
       const userInfo = req.user;
       const user: any = await findCurrentUser(userInfo?.email);
       if (!user) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
@@ -126,7 +135,11 @@ const profileControllers = {
 
       if (name !== undefined && name !== user.name) {
         user.name = name;
-        appendActivity(user, "profile_update", "Profile details updated");
+        appendActivity(
+          user,
+          ActivityTypes.PROFILE_UPDATE,
+          ActivityMessages.PROFILE_UPDATED,
+        );
         hasChanges = true;
       }
 
@@ -134,24 +147,32 @@ const profileControllers = {
         const isMatch = await bcrypt.compare(currentPassword, user.password);
         if (!isMatch) {
           res
-            .status(400)
-            .json({ message: "Incorrect current password, Try again" });
+            .status(HttpStatus.BAD_REQUEST)
+            .json({ message: ErrorMessages.INCORRECT_CURRENT_PASSWORD });
           return;
         }
         if (!vaultSalt) {
-          res.status(400).json({ message: "vaultSalt is required" });
+          res
+            .status(HttpStatus.BAD_REQUEST)
+            .json({ message: AuthMessages.VAULT_SALT_REQUIRED });
           return;
         }
-        user.password = await bcrypt.hash(newPassword, 10);
+        user.password = await bcrypt.hash(newPassword, BcryptConfig.ROUNDS);
         user.vaultSalt = vaultSalt;
         user.securityMetadata.lastPasswordUpdatedAt = new Date();
         revokeAllSessions(user);
-        appendActivity(user, "password_change", "Password changed successfully");
+        appendActivity(
+          user,
+          ActivityTypes.PASSWORD_CHANGE,
+          ActivityMessages.PASSWORD_CHANGED,
+        );
         hasChanges = true;
       }
 
       if (!hasChanges) {
-        res.status(400).json({ message: "No changes to save" });
+        res
+          .status(HttpStatus.BAD_REQUEST)
+          .json({ message: ErrorMessages.NO_CHANGES_TO_SAVE });
         return;
       }
 
@@ -159,18 +180,22 @@ const profileControllers = {
 
       if (currentPassword && newPassword) {
         clearAuthCookie(res);
-        res.status(200).json({
-          message: "Profile updated successfully. Please sign in again.",
+        res.status(HttpStatus.OK).json({
+          message: SuccessMessages.PROFILE_UPDATED_RELOGIN,
           sessionRevoked: true,
         });
         return;
       }
 
-      res.status(200).json({ message: "Profile updated successfully" });
+      res
+        .status(HttpStatus.OK)
+        .json({ message: SuccessMessages.PROFILE_UPDATED });
       return;
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Something went wrong" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.SOMETHING_WENT_WRONG });
       return;
     }
   },
@@ -180,30 +205,16 @@ const profileControllers = {
       const userInfo = req.user;
       const user: any = await findCurrentUser(userInfo?.email);
       if (!user) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
       ensureUserDefaults(user);
 
-      const settingsFields = [
-        "autoLockTimeout",
-        "clipboardTimer",
-        "maskSensitiveData",
-        "securityReminders",
-        "lockOnClose",
-        "themePreference",
-        "notifications",
-        "generatorLength",
-        "generatorSymbols",
-        "generatorNumbers",
-        "generatorUppercase",
-        "generatorLowercase",
-        "language",
-      ];
-
       let hasChanges = false;
-      for (const field of settingsFields) {
+      for (const field of SettingsFields) {
         if (Object.prototype.hasOwnProperty.call(req.body, field)) {
           user.settings[field] = req.body[field];
           hasChanges = true;
@@ -211,21 +222,29 @@ const profileControllers = {
       }
 
       if (!hasChanges) {
-        res.status(400).json({ message: "No settings changes provided" });
+        res
+          .status(HttpStatus.BAD_REQUEST)
+          .json({ message: ErrorMessages.NO_SETTINGS_CHANGES });
         return;
       }
 
-      appendActivity(user, "settings_update", "Security preferences updated");
+      appendActivity(
+        user,
+        ActivityTypes.SETTINGS_UPDATE,
+        ActivityMessages.SETTINGS_UPDATED,
+      );
       user.markModified("settings");
       await user.save();
-      res.status(200).json({
-        message: "Settings updated successfully",
+      res.status(HttpStatus.OK).json({
+        message: SuccessMessages.SETTINGS_UPDATED,
         settings: user.settings,
       });
       return;
     } catch (error) {
       console.error("Update settings error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
       return;
     }
   },
@@ -235,21 +254,31 @@ const profileControllers = {
       const userInfo = req.user;
       const user: any = await findCurrentUser(userInfo?.email);
       if (!user) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
       ensureUserDefaults(user);
       revokeAllSessions(user);
-      appendActivity(user, "session_revoke", "Signed out from all devices");
+      appendActivity(
+        user,
+        ActivityTypes.SESSION_REVOKE,
+        ActivityMessages.SESSION_REVOKED_ALL,
+      );
       await user.save();
 
       clearAuthCookie(res);
-      res.status(200).json({ message: "All sessions signed out successfully" });
+      res
+        .status(HttpStatus.OK)
+        .json({ message: SuccessMessages.ALL_SESSIONS_SIGNED_OUT });
       return;
     } catch (error) {
       console.error("Logout all sessions error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
       return;
     }
   },
@@ -259,7 +288,9 @@ const profileControllers = {
       const user = req.user;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
@@ -272,11 +303,13 @@ const profileControllers = {
         password: credentials.password,
         iv: credentials.iv,
       }));
-      res.status(200).json({ passwords: userCredentials });
+      res.status(HttpStatus.OK).json({ passwords: userCredentials });
       return;
     } catch (error) {
       console.error("Fetch Password Error", error);
-      res.status(500).json({ message: "Something went wrong" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.SOMETHING_WENT_WRONG });
     }
   },
 
@@ -286,7 +319,9 @@ const profileControllers = {
       const user = req.user;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
@@ -300,8 +335,8 @@ const profileControllers = {
       });
 
       await appDetails.save();
-      res.status(201).json({
-        message: "Credentials added successfully",
+      res.status(HttpStatus.CREATED).json({
+        message: SuccessMessages.CREDENTIALS_ADDED,
         newData: {
           id: appDetails._id,
           name: appDetails.name,
@@ -314,7 +349,9 @@ const profileControllers = {
       return;
     } catch (error) {
       console.error("Add password error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
     }
   },
 
@@ -325,7 +362,9 @@ const profileControllers = {
       const { id } = req.params;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
 
@@ -340,14 +379,16 @@ const profileControllers = {
       const response = await SavedPassword.findOneAndUpdate(
         { _id: id, user: userDoc._id },
         updatedDetails,
-        { new: true }
+        { new: true },
       );
       if (!response) {
-        res.status(404).json({ message: "Credential not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.CREDENTIAL_NOT_FOUND });
         return;
       }
-      res.status(200).json({
-        message: "Updated Credentials",
+      res.status(HttpStatus.OK).json({
+        message: SuccessMessages.CREDENTIALS_UPDATED,
         updatedData: {
           id: response?._id,
           name: response?.name,
@@ -360,7 +401,9 @@ const profileControllers = {
       return;
     } catch (error) {
       console.error("Update password error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
     }
   },
 
@@ -370,7 +413,9 @@ const profileControllers = {
       const user = req.user;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
       const deleted = await SavedPassword.findOneAndDelete({
@@ -378,14 +423,20 @@ const profileControllers = {
         user: userDoc._id,
       });
       if (!deleted) {
-        res.status(404).json({ message: "Credential not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.CREDENTIAL_NOT_FOUND });
         return;
       }
-      res.status(200).json({ message: "Credential deleted successfully" });
+      res
+        .status(HttpStatus.OK)
+        .json({ message: SuccessMessages.CREDENTIAL_DELETED });
       return;
     } catch (error) {
       console.error("Delete password error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
     }
   },
 
@@ -394,14 +445,18 @@ const profileControllers = {
       const user = req.user;
       const userDoc: any = await findCurrentUser(user?.email);
       if (!userDoc) {
-        res.status(404).json({ message: "User not found" });
+        res
+          .status(HttpStatus.NOT_FOUND)
+          .json({ message: ErrorMessages.USER_NOT_FOUND });
         return;
       }
       const savedEntries = [];
       let skipped = 0;
       const { csvData } = req.body;
       if (!Array.isArray(csvData)) {
-        res.status(400).json({ message: "csvData must be an array" });
+        res
+          .status(HttpStatus.BAD_REQUEST)
+          .json({ message: ErrorMessages.CSV_DATA_MUST_BE_ARRAY });
         return;
       }
       for (const entry of csvData) {
@@ -442,13 +497,15 @@ const profileControllers = {
           iv: appDetails.iv,
         });
       }
-      res.status(200).json({
-        message: `${savedEntries.length} imported successfully${skipped > 0 ? `, ${skipped} skipped (duplicates or missing fields)` : ""}`,
+      res.status(HttpStatus.OK).json({
+        message: csvImportSuccessMessage(savedEntries.length, skipped),
         newData: savedEntries,
       });
     } catch (error) {
       console.error("Import CSV error", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR });
     }
   },
 };

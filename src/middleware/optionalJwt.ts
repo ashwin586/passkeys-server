@@ -2,6 +2,10 @@ import jwt from "jsonwebtoken";
 import { Response, NextFunction } from "express";
 import { payloadInterface, AuthRequest } from "../types/interface";
 import { AUTH_COOKIE_NAME } from "../utils/authCookies";
+import {
+  AuthScheme,
+  HttpHeaders,
+} from "../constants/http.constants";
 
 /**
  * Attaches req.user when a valid cookie/Bearer token is present.
@@ -14,10 +18,13 @@ const optionalJwt = (
 ) => {
   try {
     const cookieToken = req.cookies?.[AUTH_COOKIE_NAME];
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers[HttpHeaders.AUTHORIZATION];
     const token =
       (typeof cookieToken === "string" && cookieToken) ||
-      (authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null);
+      (typeof authHeader === "string" &&
+      authHeader.startsWith(AuthScheme.BEARER_PREFIX)
+        ? authHeader.split(" ")[1]
+        : null);
 
     if (!token) {
       next();

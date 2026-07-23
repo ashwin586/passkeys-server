@@ -4,6 +4,13 @@ import { payloadInterface, AuthRequest } from "../types/interface";
 import User from "../models/users";
 import { AUTH_COOKIE_NAME, clearAuthCookie } from "../utils/authCookies";
 import { revokeSession } from "../utils/sessions";
+import { AuthMessages, AuthTokenErrors } from "../constants/auth.constants";
+import { ErrorMessages } from "../constants/messages.constants";
+import {
+  AuthScheme,
+  HttpHeaders,
+  HttpStatus,
+} from "../constants/http.constants";
 
 const extractToken = (req: AuthRequest): string | null => {
   const cookieToken = req.cookies?.[AUTH_COOKIE_NAME];
@@ -11,8 +18,11 @@ const extractToken = (req: AuthRequest): string | null => {
     return cookieToken;
   }
 
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith("Bearer ")) {
+  const authHeader = req.headers[HttpHeaders.AUTHORIZATION];
+  if (
+    typeof authHeader === "string" &&
+    authHeader.startsWith(AuthScheme.BEARER_PREFIX)
+  ) {
     return authHeader.split(" ")[1] || null;
   }
 
@@ -43,7 +53,9 @@ const validateJwt = async (
   const token = extractToken(req);
   try {
     if (!token) {
-      res.status(401).json({ message: "Token Missing" });
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: AuthMessages.TOKEN_MISSING });
       return;
     }
 
@@ -52,7 +64,9 @@ const validateJwt = async (
 
     if (!payload.sessionId) {
       clearAuthCookie(res);
-      res.status(401).json({ message: "Invalid token" });
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: AuthMessages.INVALID_TOKEN });
       return;
     }
 
@@ -60,7 +74,9 @@ const validateJwt = async (
 
     if (!user) {
       clearAuthCookie(res);
-      res.status(401).json({ message: "Invalid token" });
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: AuthMessages.INVALID_TOKEN });
       return;
     }
 
@@ -70,7 +86,9 @@ const validateJwt = async (
     );
     if (!activeSession) {
       clearAuthCookie(res);
-      res.status(401).json({ message: "Session revoked" });
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: AuthMessages.SESSION_REVOKED });
       return;
     }
 
@@ -81,18 +99,24 @@ const validateJwt = async (
     next();
   } catch (error: any) {
     clearAuthCookie(res);
-    if (error.name === "TokenExpiredError") {
+    if (error.name === AuthTokenErrors.EXPIRED) {
       if (token) {
         await markExpiredSessionInactive(token);
       }
-      res.status(401).json({ message: "Session Expired" });
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: AuthMessages.SESSION_EXPIRED });
       return;
-    } else if (error.name === "JsonWebTokenError") {
-      res.status(401).json({ message: "Invalid token" });
+    } else if (error.name === AuthTokenErrors.INVALID) {
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: AuthMessages.INVALID_TOKEN });
       return;
     }
 
-    res.status(500).json({ message: "Internal server error" });
+    res
+      .status(HttpStatus.INTERNAL_SERVER_ERROR)
+      .json({ message: ErrorMessages.INTERNAL_SERVER_ERROR_LOWER });
     return;
   }
 };
