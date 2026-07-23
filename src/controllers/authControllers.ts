@@ -9,6 +9,10 @@ import {
   getJwtExpiresIn,
   setAuthCookie,
 } from "../utils/authCookies";
+import {
+  createSessionRecord,
+  revokeSession,
+} from "../utils/sessions";
 
 const asPlainObject = (value: any) => {
   if (!value) return {};
@@ -70,7 +74,7 @@ const authControllers = {
       }
 
       const now = new Date();
-      const sessionId = crypto.randomUUID();
+      const session = createSessionRecord(req);
       const previousLoginAt = existingUser?.securityMetadata?.lastLoginAt || null;
       existingUser.securityMetadata = {
         ...asPlainObject(existingUser.securityMetadata),
@@ -78,18 +82,10 @@ const authControllers = {
         lastLoginAt: now,
         loginCount: (existingUser?.securityMetadata?.loginCount || 0) + 1,
       };
-      existingUser.sessions = [
-        {
-          sessionId,
-          userAgent: req.get("user-agent") || "Unknown device",
-          ipAddress:
-            req.ip || (req.headers["x-forwarded-for"] as string) || "Unknown IP",
-          createdAt: now,
-          lastSeenAt: now,
-          active: true,
-        },
-        ...(existingUser.sessions || []),
-      ].slice(0, 20);
+      existingUser.sessions = [session, ...(existingUser.sessions || [])].slice(
+        0,
+        20,
+      );
       existingUser.activity = [
         {
           type: "login",
@@ -104,7 +100,7 @@ const authControllers = {
       const payload = {
         email: existingUser?.email,
         role: "user",
-        sessionId,
+        sessionId: session.sessionId,
       };
       const accessToken = jwt.sign(payload, process.env.JWT_SECRET!, {
         expiresIn: getJwtExpiresIn(),
@@ -132,18 +128,8 @@ const authControllers = {
 
       if (email && sessionId) {
         const user: any = await User.findOne({ email });
-        if (user?.sessions) {
-          user.sessions = user.sessions.map((session: any) => {
-            if (session.sessionId === sessionId) {
-              return {
-                ...session.toObject?.(),
-                ...session,
-                active: false,
-                lastSeenAt: new Date(),
-              };
-            }
-            return session;
-          });
+        if (user) {
+          revokeSession(user, sessionId);
           await user.save();
         }
       }

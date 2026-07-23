@@ -22,7 +22,7 @@ export interface authInterface {
 export interface payloadInterface {
   email: string;
   role: string;
-  sessionId?: string;
+  sessionId: string;
   iat: number;
   exp: number;
 }

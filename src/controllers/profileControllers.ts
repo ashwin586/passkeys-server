@@ -4,6 +4,7 @@ import SavedPassword from "../models/savedPasswords";
 import { AuthRequest, securitySummaryInterface } from "../types/interface";
 import bcrypt from "bcrypt";
 import { clearAuthCookie } from "../utils/authCookies";
+import { revokeAllSessions } from "../utils/sessions";
 
 const DEFAULT_SETTINGS = {
   autoLockTimeout: 15,
@@ -144,6 +145,7 @@ const profileControllers = {
         user.password = await bcrypt.hash(newPassword, 10);
         user.vaultSalt = vaultSalt;
         user.securityMetadata.lastPasswordUpdatedAt = new Date();
+        revokeAllSessions(user);
         appendActivity(user, "password_change", "Password changed successfully");
         hasChanges = true;
       }
@@ -154,6 +156,16 @@ const profileControllers = {
       }
 
       await user.save();
+
+      if (currentPassword && newPassword) {
+        clearAuthCookie(res);
+        res.status(200).json({
+          message: "Profile updated successfully. Please sign in again.",
+          sessionRevoked: true,
+        });
+        return;
+      }
+
       res.status(200).json({ message: "Profile updated successfully" });
       return;
     } catch (error) {
@@ -228,12 +240,7 @@ const profileControllers = {
       }
 
       ensureUserDefaults(user);
-      user.sessions = user.sessions.map((session: any) => ({
-        ...session.toObject?.(),
-        ...session,
-        active: false,
-        lastSeenAt: new Date(),
-      }));
+      revokeAllSessions(user);
       appendActivity(user, "session_revoke", "Signed out from all devices");
       await user.save();
 
