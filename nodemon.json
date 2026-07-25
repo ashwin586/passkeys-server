@@ -6,7 +6,7 @@
   "ignore": [
     "node_modules"
   ],
-  "exec": "npx ts-node src/app.ts",
+  "exec": "npx tsx src/app.ts",
   "legacyWatch": true,
   "signal": "SIGTERM"
 }
