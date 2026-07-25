@@ -8,6 +8,10 @@ import mongoDb from "./config/mongoDB";
 import routes from "./routes/routes";
 import corsOptions from "./config/cors";
 import { assertJwtSecret } from "./utils/authCookies";
+import {
+  permissionsPolicyHeader,
+  securityHeaders,
+} from "./middleware/securityHeaders";
 
 assertJwtSecret();
 
@@ -15,6 +19,8 @@ const app = express();
 
 mongoDb();
 
+app.use(securityHeaders);
+app.use(permissionsPolicyHeader);
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
